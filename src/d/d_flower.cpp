@@ -29,6 +29,11 @@
 
 static bool l_CutSoundFlag;
 
+// Texture data arrays (placeholders - need correct sizes from binary)
+static u8 l_Txq_bessou_hanaTEX[0x1000];      // Texture for bessou hana
+static u8 l_Txo_ob_flower_white_64x64TEX[0x2000];  // White flower texture (64x64)
+static u8 l_Txo_ob_flower_pink_64x64TEX[0x2000];   // Pink flower texture (64x64)
+
 // Vertex data for flower rendering (extracted from binary)
 static Vec l_pos[] = {
     {-18.0149f, 37.7783f, 3.5328f},
@@ -698,3 +703,18 @@ void dFlower_packet_c::setAnm(int i_idx, s16 i_angle) {
     anm->field_0x02 = i_angle;
     anm->field_0x04 = 0;
 }
+
+/* 800C1288-800C12A4       .text __sinit_d_flower_cpp */
+static void __sinit_d_flower_cpp() {
+    l_CutSoundFlag = false;
+    
+    // Patch texture pointers into display lists
+    // These are runtime patches that get applied once at init
+    *(u32*)((u8*)l_matDL + 0x14) = (u32)l_Txq_bessou_hanaTEX;
+    *(u32*)((u8*)l_matDL + 0x24) = (u32)l_Txo_ob_flower_white_64x64TEX;
+    *(u32*)((u8*)l_matDL + 0x34) = (u32)l_Txo_ob_flower_pink_64x64TEX;
+}
+
+/* static initializer */
+__declspec(section ".ctors")
+static void* const __sinit_d_flower_cpp_reference = __sinit_d_flower_cpp;

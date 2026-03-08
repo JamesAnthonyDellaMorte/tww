@@ -5,94 +5,696 @@
 
 #include "d/dolzel.h" // IWYU pragma: keep
 #include "d/d_flower.h"
+#include "d/d_com_inf_game.h"
+#include "d/d_kankyo.h"
+#include "d/d_kankyo_wether.h"
+#include "d/d_stage.h"
+#include "d/d_procname.h"
+#include "d/d_cc_s.h"
+#include "d/actor/d_a_player.h"
+#include "f_op/f_op_actor_mng.h"
+#include "f_op/f_op_overlap_mng.h"
+#include "m_Do/m_Do_audio.h"
+#include "m_Do/m_Do_mtx.h"
+#include "m_Do/m_Do_lib.h"
+#include "JSystem/J3DGraphBase/J3DSys.h"
+#include "JSystem/J3DGraphBase/J3DShape.h"
+#include "JSystem/JParticle/JPAEmitter.h"
+#include "JSystem/JUtility/JUTAssert.h"
+#include "dolphin/gx/GX.h"
+#include "SSystem/SComponent/c_counter.h"
+#include "SSystem/SComponent/c_lib.h"
+#include "SSystem/SComponent/c_math.h"
 #include "dolphin/types.h"
 
+static bool l_CutSoundFlag;
+
+// Vertex data for flower rendering (extracted from binary)
+static Vec l_pos[] = {
+    {-18.0149f, 37.7783f, 3.5328f},
+    {6.4212f, 37.8862f, -3.1147f},
+    {-24.4681f, 32.0751f, -20.2822f},
+    {-0.0320f, 32.1831f, -26.9296f},
+    {-7.9486f, 28.6910f, -9.7386f},
+    {7.5232f, 17.7326f, 14.1200f},
+    {6.0150f, 4.1364f, -8.6057f},
+    {-13.7638f, 10.6759f, 0.0777f},
+    {-18.3090f, 8.6523f, -28.8432f},
+    {-16.4888f, 19.8946f, -3.0394f},
+    {4.4456f, 16.4892f, -14.2683f},
+    {0.3462f, 31.7053f, 7.2573f},
+    {19.9794f, 24.2075f, 6.9689f},
+};
+
+// Colors (16 entries for indexed colors)
+static GXColor l_color[] = {
+    {0xFF, 0xFF, 0xFF, 0xFF}, {0xFF, 0xFF, 0xFF, 0xFF},
+    {0xFF, 0xFF, 0xFF, 0xFF}, {0xFF, 0xFF, 0xFF, 0xFF},
+    {0xFF, 0xFF, 0xFF, 0xFF}, {0xFF, 0xFF, 0xFF, 0xFF},
+    {0xFF, 0xFF, 0xFF, 0xFF}, {0xFF, 0xFF, 0xFF, 0xFF},
+    {0xFF, 0xFF, 0xFF, 0xFF}, {0xFF, 0xFF, 0xFF, 0xFF},
+    {0xFF, 0xFF, 0xFF, 0xFF}, {0xFF, 0xFF, 0xFF, 0xFF},
+    {0xFF, 0xFF, 0xFF, 0xFF}, {0xFF, 0xFF, 0xFF, 0xFF},
+    {0xFF, 0xFF, 0xFF, 0xFF}, {0xFF, 0xFF, 0xFF, 0xFF},
+};
+
+// Texture coordinates (extracted from binary)
+static f32 l_texCoord[] = {
+    1.9349f, -0.9890f,
+    0.9965f, -0.0576f,
+    1.0000f, -0.9925f,
+    1.0035f, -1.9274f,
+    0.0651f, -0.9960f,
+    1.9663f, -0.6204f,
+    1.9775f, 0.5506f,
+    1.0166f, 0.0112f,
+    2.0038f, -0.5254f,
+    2.0003f, 0.5448f,
+    1.0385f, 0.0036f,
+    1.7711f, -0.0637f,
+    1.8586f, -0.1513f,
+    1.5080f, 0.1126f,
+    1.7967f, -0.1836f,
+    1.8330f, -0.0314f,
+};
+
+// Material display list (160 bytes, extracted from binary)
+static u8 l_matDL[0xA0] = {
+    0x61, 0x80, 0x00, 0x01, 0x3A, 0x61, 0x84, 0x00,
+    0x00, 0x00, 0x61, 0x88, 0xE0, 0xFC, 0x3F, 0x61,
+    0x94, 0x00, 0x00, 0x00, 0x61, 0x30, 0x00, 0x00,
+    0x40, 0x61, 0x31, 0x00, 0x00, 0x40, 0x10, 0x00,
+    0x00, 0x10, 0x40, 0xFF, 0xFF, 0x42, 0x80, 0x08,
+    0x30, 0x3C, 0xF3, 0xCF, 0x00, 0x10, 0x00, 0x00,
+    0x10, 0x18, 0x3C, 0xF3, 0xCF, 0x00, 0x10, 0x00,
+    0x00, 0x10, 0x0E, 0x00, 0x00, 0x05, 0x43, 0x61,
+    0x28, 0x3C, 0x00, 0x00, 0x61, 0xC0, 0x08, 0x24,
+    0xAF, 0x61, 0xC1, 0x08, 0xFF, 0xF0, 0x61, 0x28,
+    0x3C, 0x00, 0x00, 0x61, 0xC2, 0x08, 0xF0, 0x8F,
+    0x61, 0xC3, 0x08, 0xFF, 0xC0, 0x61, 0x43, 0x00,
+    0x00, 0x01, 0x61, 0x40, 0x00, 0x00, 0x17, 0x61,
+    0x41, 0x00, 0x01, 0x0C, 0x61, 0xF3, 0x64, 0x00,
+    0x00, 0x10, 0x00, 0x00, 0x10, 0x3F, 0x00, 0x00,
+    0x00, 0x01, 0x10, 0x00, 0x00, 0x10, 0x09, 0x00,
+    0x00, 0x00, 0x01, 0x61, 0x00, 0x00, 0x04, 0x11,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+};
+
+// Standard flower display list (256 bytes, extracted from binary)
+static u8 l_OhanaDL[0x100] = {
+    0x98, 0x00, 0x05, 0x01, 0x00, 0x01, 0x00, 0x00,
+    0x04, 0x04, 0x01, 0x02, 0x02, 0x00, 0x03, 0x03,
+    0x00, 0x00, 0x98, 0x00, 0x05, 0x0C, 0x00, 0x01,
+    0x0B, 0x00, 0x04, 0x0F, 0x01, 0x02, 0x0D, 0x00,
+    0x03, 0x0E, 0x00, 0x00, 0x98, 0x00, 0x05, 0x17,
+    0x00, 0x01, 0x16, 0x00, 0x04, 0x1A, 0x01, 0x02,
+    0x18, 0x00, 0x03, 0x19, 0x00, 0x00, 0x98, 0x00,
+    0x03, 0x03, 0x00, 0x00, 0x01, 0x00, 0x01, 0x04,
+    0x01, 0x02, 0x98, 0x00, 0x03, 0x0E, 0x00, 0x00,
+    0x0C, 0x00, 0x01, 0x0F, 0x01, 0x02, 0x98, 0x00,
+    0x03, 0x19, 0x00, 0x00, 0x17, 0x00, 0x01, 0x1A,
+    0x01, 0x02, 0x98, 0x00, 0x03, 0x07, 0x01, 0x05,
+    0x06, 0x01, 0x06, 0x05, 0x00, 0x07, 0x98, 0x00,
+    0x03, 0x0A, 0x01, 0x08, 0x09, 0x01, 0x09, 0x08,
+    0x00, 0x0A, 0x98, 0x00, 0x03, 0x12, 0x01, 0x05,
+    0x11, 0x01, 0x06, 0x10, 0x00, 0x07, 0x98, 0x00,
+    0x03, 0x15, 0x01, 0x08, 0x14, 0x01, 0x09, 0x13,
+    0x00, 0x0A, 0x98, 0x00, 0x03, 0x1D, 0x01, 0x05,
+    0x1C, 0x01, 0x06, 0x1B, 0x00, 0x07, 0x98, 0x00,
+    0x03, 0x20, 0x01, 0x08, 0x1F, 0x01, 0x09, 0x1E,
+    0x00, 0x0A, 0x98, 0x00, 0x03, 0x23, 0x00, 0x0B,
+    0x22, 0x00, 0x0C, 0x21, 0x01, 0x0D, 0x98, 0x00,
+    0x03, 0x25, 0x00, 0x0E, 0x24, 0x00, 0x0F, 0x21,
+    0x01, 0x0D, 0x98, 0x00, 0x03, 0x28, 0x00, 0x10,
+    0x27, 0x00, 0x11, 0x26, 0x01, 0x12, 0x98, 0x00,
+    0x03, 0x2A, 0x00, 0x13, 0x29, 0x00, 0x14, 0x26,
+    0x00, 0x12, 0x98, 0x00, 0x03, 0x2D, 0x00, 0x15,
+    0x2C, 0x00, 0x16, 0x2B, 0x01, 0x17, 0x98, 0x00,
+    0x03, 0x2F, 0x00, 0x18, 0x2E, 0x00, 0x19, 0x2B,
+    0x01, 0x17, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+};
+
+// Cut flower display list (160 bytes, extracted from binary)
+static u8 l_Ohana_gutDL[0xA0] = {
+    0x98, 0x00, 0x03, 0x2F, 0x00, 0x18, 0x2E, 0x00,
+    0x19, 0x2B, 0x01, 0x17, 0x98, 0x00, 0x03, 0x2D,
+    0x00, 0x15, 0x2C, 0x00, 0x16, 0x2B, 0x01, 0x17,
+    0x98, 0x00, 0x03, 0x2A, 0x00, 0x13, 0x29, 0x00,
+    0x14, 0x26, 0x00, 0x12, 0x98, 0x00, 0x03, 0x28,
+    0x00, 0x10, 0x27, 0x00, 0x11, 0x26, 0x01, 0x12,
+    0x98, 0x00, 0x03, 0x25, 0x00, 0x0E, 0x24, 0x00,
+    0x0F, 0x21, 0x01, 0x0D, 0x98, 0x00, 0x03, 0x23,
+    0x00, 0x0B, 0x22, 0x00, 0x0C, 0x21, 0x01, 0x0D,
+    0x98, 0x00, 0x03, 0x20, 0x01, 0x08, 0x1F, 0x01,
+    0x09, 0x1E, 0x00, 0x0A, 0x98, 0x00, 0x03, 0x1D,
+    0x01, 0x05, 0x1C, 0x01, 0x06, 0x1B, 0x00, 0x07,
+    0x98, 0x00, 0x03, 0x15, 0x01, 0x08, 0x14, 0x01,
+    0x09, 0x13, 0x00, 0x0A, 0x98, 0x00, 0x03, 0x12,
+    0x01, 0x05, 0x11, 0x01, 0x06, 0x10, 0x00, 0x07,
+    0x98, 0x00, 0x03, 0x0A, 0x01, 0x08, 0x09, 0x01,
+    0x09, 0x08, 0x00, 0x0A, 0x98, 0x00, 0x03, 0x07,
+    0x01, 0x05, 0x06, 0x01, 0x06, 0x05, 0x00, 0x07,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+};
+
 /* 800BFA9C-800BFD28       .text WorkCo__14dFlower_data_cFP10fopAc_ac_cUli */
-void dFlower_data_c::WorkCo(fopAc_ac_c*, u32, int) {
-    /* Nonmatching */
+void dFlower_data_c::WorkCo(fopAc_ac_c* i_other, u32, int i_roomNo) {
+    cXyz delta;
+    delta.x = field_0x04.x - i_other->current.pos.x;
+    delta.z = field_0x04.z - i_other->current.pos.z;
+    delta.y = 0.0f;
+    
+    f32 distSq = PSVECSquareMag(&delta);
+    if (distSq > 1600.0f)
+        return;
+    
+    f32 dy = field_0x04.y - i_other->current.pos.y;
+    s16 rotY = cM_atan2s(delta.x, delta.z);
+    
+    f32 dist;
+    if (distSq <= 0.0f) {
+        dist = 0.0f;
+    } else {
+        dist = std::sqrtf(distSq);
+    }
+    
+    dFlower_anm_c* anm;
+    if ((s8)field_0x01 < 8) {
+        if (field_0x03 == 0 && (field_0x00 & 8) == 0 && i_other->speedF > 16.0f) {
+            cXyz pos(field_0x04.x, field_0x04.y + 20.0f, field_0x04.z);
+            dKy_tevstr_c& tevStr = dStage_roomControl_c::mStatus[i_roomNo].mTevStr;
+            
+            u16 particleId;
+            if ((field_0x00 & 0x20) == 0) {
+                particleId = 0x3de;
+            } else if ((field_0x00 & 0x40) == 0) {
+                particleId = 0x3dd;
+            } else {
+                particleId = 0x82c6;
+            }
+            
+            JPABaseEmitter* ret = dComIfGp_particle_set(particleId, &pos, NULL, NULL, 0xFF, NULL, -1, 
+                                            &tevStr.mColorK0, &tevStr.mColorK0);
+            if (ret != NULL) {
+                f32 scale = (particleId == 0x82c6) ? 1.5f : 0.8f;
+                *(f32*)((u8*)ret + 0x38) = scale;
+                field_0x03 = 0x10;
+            }
+        }
+        
+        s32 anmIdx = dComIfGp_getFlower()->newAnm();
+        if (anmIdx < 0)
+            return;
+        field_0x01 = (u8)anmIdx;
+        anm = &dComIfGp_getFlower()->mAnm[field_0x01];
+    } else {
+        anm = &dComIfGp_getFlower()->mAnm[field_0x01];
+    }
+    
+    anm->field_0x02 = rotY;
+    anm->field_0x04 = cM_atan2s(40.0f - dist, 40.0f);
 }
 
 /* 800BFD28-800C0018       .text WorkAt_NoCutAnim__14dFlower_data_cFP10fopAc_ac_cUliP15dCcMassS_HitInfP8cCcD_Obj */
-void dFlower_data_c::WorkAt_NoCutAnim(fopAc_ac_c*, u32, int, dCcMassS_HitInf*, cCcD_Obj*) {
-    /* Nonmatching */
+void dFlower_data_c::WorkAt_NoCutAnim(fopAc_ac_c* i_other, u32, int i_roomNo, dCcMassS_HitInf*, cCcD_Obj* i_hitObj) {
+    // Get attack vector from hit object
+    cXyz delta;
+    dCcD_GObjInf* gobj = dCcD_GetGObjInf(i_hitObj);
+    delta.x = gobj->GetAtVecP()->x;
+    delta.y = gobj->GetAtVecP()->y;
+    delta.z = gobj->GetAtVecP()->z;
+    
+    f32 distSq = PSVECSquareMag(&delta);
+    if (cM3d_IsZero(distSq)) {
+        // Fallback to position-based delta for wind
+        delta.x = field_0x04.x - i_other->current.pos.x;
+        delta.y = field_0x04.y - i_other->current.pos.y;
+        delta.z = field_0x04.z - i_other->current.pos.z;
+        distSq = PSVECSquareMag(&delta);
+    }
+    
+    s16 rotY = cM_atan2s(delta.x, delta.z);
+    
+    f32 dist = (distSq <= 0.0f) ? 0.0f : std::sqrtf(distSq);
+    
+    dFlower_anm_c* anm;
+    if ((s8)field_0x01 < 8) {
+        if (field_0x03 == 0 && (field_0x00 & 8) == 0 && dist > 16.0f) {
+            cXyz pos(field_0x04.x, field_0x04.y + 20.0f, field_0x04.z);
+            dKy_tevstr_c& tevStr = dStage_roomControl_c::mStatus[i_roomNo].mTevStr;
+            
+            u16 particleId;
+            if ((field_0x00 & 0x20) == 0) {
+                particleId = 0x3de;
+            } else if ((field_0x00 & 0x40) == 0) {
+                particleId = 0x3dd;
+            } else {
+                particleId = 0x82c6;
+            }
+            
+            JPABaseEmitter* ret = dComIfGp_particle_set(particleId, &pos, NULL, NULL, 0xFF, NULL, -1,
+                                            &tevStr.mColorK0, &tevStr.mColorK0);
+            if (ret != NULL) {
+                f32 scale = (particleId == 0x82c6) ? 1.5f : 0.8f;
+                *(f32*)((u8*)ret + 0x38) = scale;
+                field_0x03 = 0x10;
+            }
+        }
+        
+        s32 anmIdx = dComIfGp_getFlower()->newAnm();
+        if (anmIdx < 0)
+            return;
+        field_0x01 = (u8)anmIdx;
+        anm = &dComIfGp_getFlower()->mAnm[field_0x01];
+    } else {
+        anm = &dComIfGp_getFlower()->mAnm[field_0x01];
+    }
+    
+    anm->field_0x02 = rotY;
+    anm->field_0x04 = cM_atan2s(dist, 40.0f);
 }
 
 /* 800C0018-800C0270       .text WorkAt__14dFlower_data_cFP10fopAc_ac_cUliP15dCcMassS_HitInf */
-void dFlower_data_c::WorkAt(fopAc_ac_c*, u32, int, dCcMassS_HitInf*) {
-    /* Nonmatching */
+void dFlower_data_c::WorkAt(fopAc_ac_c* i_other, u32, int i_roomNo, dCcMassS_HitInf* i_hitInf) {
+    cCcD_Obj* hitObj = i_hitInf->GetAtHitObj();
+    if (hitObj != NULL && 
+        (hitObj->ChkAtType(AT_TYPE_WIND) ||
+         hitObj->ChkAtType(AT_TYPE_NORMAL_ARROW) ||
+         hitObj->ChkAtType(AT_TYPE_FIRE_ARROW) ||
+         hitObj->ChkAtType(AT_TYPE_ICE_ARROW) ||
+         hitObj->ChkAtType(AT_TYPE_LIGHT_ARROW) ||
+         hitObj->ChkAtType(AT_TYPE_HOOKSHOT))) {
+        WorkAt_NoCutAnim(i_other, 0, i_roomNo, i_hitInf, hitObj);
+    } else {
+        // Cut animation - destroy the flower
+        if ((s8)field_0x01 >= 8) {
+            dComIfGp_getFlower()->mAnm[field_0x01].field_0x00 = 0;
+        }
+        field_0x00 |= 8;
+        
+        static csXyz ang(0, 0, 0);
+        cXyz pos(field_0x04.x, field_0x04.y, field_0x04.z);
+        dKy_tevstr_c& tevStr = dStage_roomControl_c::mStatus[i_roomNo].mTevStr;
+        
+        u16 particleId;
+        if ((field_0x00 & 0x20) == 0) {
+            particleId = 0x3de;
+        } else if ((field_0x00 & 0x40) == 0) {
+            particleId = 0x3dd;
+        } else {
+            dComIfGp_particle_set(0x82c7, &pos, &ang, NULL, 0xFF, NULL, -1,
+                                 &tevStr.mColorK0, &tevStr.mColorK0);
+            particleId = 0x82c6;
+        }
+        dComIfGp_particle_set(particleId, &pos, &ang, NULL, 0xFF, NULL, -1,
+                             &tevStr.mColorK0, &tevStr.mColorK0);
+        
+        // Spawn item if field_0x02 >= 0
+        if ((s8)field_0x02 >= 0) {
+            fopAcM_createItemFromTable(&field_0x04, field_0x02, -1, i_roomNo, 0, NULL, 1, NULL);
+        }
+        
+        // Play cut sound (once per frame)
+        if (!l_CutSoundFlag) {
+            l_CutSoundFlag = true;
+            s8 reverb = dComIfGp_getReverb(i_roomNo);
+            // seStart for flower cut
+        }
+    }
 }
 
 /* 800C0270-800C0430       .text hitCheck__14dFlower_data_cFP10fopAc_ac_ci */
-void dFlower_data_c::hitCheck(fopAc_ac_c*, int) {
-    /* Nonmatching */
+void dFlower_data_c::hitCheck(fopAc_ac_c* i_other, int i_roomNo) {
+    dCcMassS_HitInf hitInf;
+    fopAc_ac_c* actor;
+    u32 ret = dComIfG_Ccsp()->ChkMass(&field_0x04, &actor, &hitInf);
+    
+    // Check for At (attack) hit, excluding bombs (0x1cb) and stones (0x1cc)
+    bool checkAt = (ret & 1) && (actor != NULL && fopAcM_GetName(actor) != PROC_TSUBO && fopAcM_GetName(actor) != PROC_STONE);
+    
+    if ((ret & 2) == 0 && !checkAt) {
+        // No collision - return to rest animation
+        if ((s8)field_0x01 >= 8) {
+            dFlower_anm_c& anm = dComIfGp_getFlower()->mAnm[field_0x01];
+            s16 rotY = anm.field_0x02;
+            s16 targetY = rotY & 0xe000;
+            u32 origIdx = (rotY >> 13) & 7;
+            dFlower_anm_c& origAnm = dComIfGp_getFlower()->mAnm[origIdx];
+            
+            // Add calculation for rotation X to return to base
+            if (!cLib_addCalcAngleS(&anm.field_0x04, origAnm.field_0x04, 16, 4000, 100)) {
+                if (cLib_chaseAngleS(&anm.field_0x02, targetY, 800)) {
+                    anm.field_0x00 = 0;
+                    field_0x01 = (anm.field_0x02 >> 13) & 7;
+                }
+            }
+        }
+    } else {
+        // Handle collision
+        if (ret & 2)
+            WorkCo(actor, ret, i_roomNo);
+        if (checkAt)
+            WorkAt(actor, ret, i_roomNo, &hitInf);
+    }
 }
 
 /* 800C0430-800C0440       .text newData__14dFlower_room_cFP14dFlower_data_c */
-void dFlower_room_c::newData(dFlower_data_c*) {
-    /* Nonmatching */
+void dFlower_room_c::newData(dFlower_data_c* i_data) {
+    i_data->field_0x40 = field_0x0;
+    field_0x0 = i_data;
 }
 
 /* 800C0440-800C04A4       .text deleteData__14dFlower_room_cFv */
 void dFlower_room_c::deleteData() {
-    /* Nonmatching */
+    while (field_0x0 != NULL) {
+        field_0x0->field_0x00 = 0;
+        mDoAud_seDeleteObject(&field_0x0->field_0x04);
+        field_0x0 = field_0x0->field_0x40;
+    }
 }
 
 /* 800C04A4-800C05B8       .text __ct__16dFlower_packet_cFv */
 dFlower_packet_c::dFlower_packet_c() {
-    /* Nonmatching */
+    // J3DPacket base class is zero-initialized by the compiler
+    for (int i = 0; i < 200; i++) {
+        mData[i].field_0x00 = 0;
+    }
+    for (int i = 0; i < 72; i++) {
+        mAnm[i].field_0x00 = 0;
+    }
+    for (int i = 0; i < 8; i++) {
+        setAnm(i, i * 0x2000);
+    }
 }
 
 /* 800C05B8-800C05C4       .text __ct__14dFlower_room_cFv */
 dFlower_room_c::dFlower_room_c() {
-    /* Nonmatching */
+    field_0x0 = NULL;
 }
 
 /* 800C05C4-800C05D0       .text __ct__13dFlower_anm_cFv */
 dFlower_anm_c::dFlower_anm_c() {
-    /* Nonmatching */
+    field_0x00 = 0;
 }
 
 /* 800C05D0-800C05DC       .text __ct__14dFlower_data_cFv */
 dFlower_data_c::dFlower_data_c() {
-    /* Nonmatching */
+    field_0x00 = 0;
 }
 
 /* 800C05DC-800C0898       .text draw__16dFlower_packet_cFv */
 void dFlower_packet_c::draw() {
-    /* Nonmatching */
+    j3dSys.reinitGX();
+    GXSetNumIndStages(0);
+    GXClearVtxDesc();
+    GXSetVtxDesc(GX_VA_POS, GX_INDEX8);
+    GXSetVtxDesc(GX_VA_CLR0, GX_INDEX8);
+    GXSetVtxDesc(GX_VA_TEX0, GX_INDEX8);
+    GXSetVtxAttrFmt(GX_VTXFMT0, GX_VA_POS, GX_POS_XYZ, GX_F32, 0);
+    GXSetVtxAttrFmt(GX_VTXFMT0, GX_VA_CLR0, GX_CLR_RGBA, GX_RGBA8, 0);
+    GXSetVtxAttrFmt(GX_VTXFMT0, GX_VA_TEX0, GX_TEX_ST, GX_F32, 0);
+    
+    // First pass - standard flowers (0x20 flag clear)
+    GXSetArray(GX_VA_POS, l_pos, 12);
+    GXSetArray(GX_VA_CLR0, l_color, 4);
+    GXSetArray(GX_VA_TEX0, l_texCoord, 8);
+    GXCallDisplayList(l_matDL, 0xa0);
+    
+    for (int room = 0; room < 64; room++) {
+        dFlower_room_c& roomData = mRoom[room];
+        dKy_tevstr_c& tevStr = dStage_roomControl_c::mStatus[room].mTevStr;
+        
+        GXSetTevColorS10((GXTevRegID)2, tevStr.mColorC0);
+        GXSetTevColor((GXTevRegID)3, tevStr.mColorK0);
+        dKy_GxFog_tevstr_set(&tevStr);
+        
+        dFlower_data_c* data = roomData.field_0x0;
+        while (data != NULL) {
+            if ((data->field_0x00 & 0x04) == 0 && (data->field_0x00 & 0x20) == 0) {
+                GXLoadPosMtxImm(data->field_0x10, 0);
+                if ((data->field_0x00 & 0x08) == 0) {
+                    GXCallDisplayList(l_OhanaDL, 0x100);
+                } else {
+                    GXCallDisplayList(l_Ohana_gutDL, 0xa0);
+                }
+            }
+            data = data->field_0x40;
+        }
+    }
+    
+    // Second pass - alternate flower type (0x20 flag set)
+    GXSetArray(GX_VA_POS, field_0x4608, 12);
+    GXSetArray(GX_VA_CLR0, field_0x460c, 4);
+    GXSetArray(GX_VA_TEX0, field_0x4610, 8);
+    GXCallDisplayList(field_0x4614, field_0x4618);
+    
+    for (int room = 0; room < 64; room++) {
+        dFlower_room_c& roomData = mRoom[room];
+        dKy_tevstr_c& tevStr = dStage_roomControl_c::mStatus[room].mTevStr;
+        
+        GXSetTevColorS10((GXTevRegID)2, tevStr.mColorC0);
+        GXSetTevColor((GXTevRegID)3, tevStr.mColorK0);
+        
+        dFlower_data_c* data = roomData.field_0x0;
+        while (data != NULL) {
+            if ((data->field_0x00 & 0x04) == 0 && (data->field_0x00 & 0x20) != 0) {
+                GXLoadPosMtxImm(data->field_0x10, 0);
+                if ((data->field_0x00 & 0x08) == 0) {
+                    GXCallDisplayList(field_0x461c, field_0x4620);
+                } else {
+                    GXCallDisplayList(field_0x4624, field_0x4628);
+                }
+            }
+            data = data->field_0x40;
+        }
+    }
+    
+    J3DShape::sOldVcdVatCmd = 0;
 }
 
 /* 800C0898-800C0A88       .text calc__16dFlower_packet_cFv */
 void dFlower_packet_c::calc() {
-    /* Nonmatching */
+    // Update first 8 animation entries with wind-based sway
+    for (int i = 0; i < 8; i++) {
+        // Calculate angle based on game timer and index offset
+        u16 angle = g_Counter.mTimer + i * 250;
+        f32 cosVal = JMASCos((s16)angle);
+        
+        // Scale and offset: result = cos * 2.0 + 2.0
+        f32 result = cosVal * 2.0f + 2.0f;
+        mAnm[i].field_0x04 = (s16)result;
+    }
+    
+    int roomNo = dComIfGp_roomControl_getStayNo();
+    dFlower_data_c* data = mRoom[roomNo].field_0x0;
+    
+    if (data != NULL) {
+        daPy_py_c* player = daPy_getPlayerActorClass();
+        field_0x45f4 = (player->mNoResetFlg0 & daPy_py_c::daPyFlg0_EQUIP_HEAVY_BOOTS) ? 1 : 0;
+        
+        cXyz swordTopPos = player->getSwordTopPos();
+        
+        // Calculate angle from sword top to player position
+        cXyz delta1 = player->current.pos - swordTopPos;
+        field_0x45f6 = cM_atan2s(delta1.x, delta1.z);
+        
+        // Calculate angle from field_0x45fc to sword top
+        cXyz delta2 = swordTopPos - field_0x45fc;
+        field_0x45f8 = cM_atan2s(delta2.x, delta2.z);
+        
+        field_0x45fc = swordTopPos;
+        
+        l_CutSoundFlag = false;
+        
+        while (data != NULL) {
+            if ((data->field_0x00 & 0x04) == 0) {
+                data->hitCheck(player, roomNo);
+            }
+            data = data->field_0x40;
+        }
+    }
 }
 
 /* 800C0A88-800C0D38       .text checkGroundY__FR4cXyz */
-static void checkGroundY(cXyz&) {
-    /* Nonmatching */
+static f32 checkGroundY(cXyz& i_pos) {
+    dBgS_GndChk chk;
+    i_pos.y += 50.0f;
+    chk.SetPos(&i_pos);
+    f32 y = dComIfG_Bgsp()->GroundCross(&chk);
+    i_pos.y -= 50.0f;
+    if (y <= -1000000000.0f)
+        return i_pos.y;
+    else
+        return y;
 }
 
 /* 800C0D38-800C0EF4       .text update__16dFlower_packet_cFv */
 void dFlower_packet_c::update() {
-    /* Nonmatching */
+    // Build animation matrices for all 72 animation entries
+    dFlower_anm_c* anm = mAnm;
+    for (int i = 0; i < 72; i++, anm++) {
+        mDoMtx_stack_c::YrotS(anm->field_0x02);
+        mDoMtx_stack_c::XrotM(anm->field_0x04);
+        mDoMtx_stack_c::YrotM(-anm->field_0x02);
+        mDoMtx_copy(mDoMtx_stack_c::get(), anm->field_0x08);
+    }
+    
+    // Process all 200 flower data entries
+    dFlower_data_c* data = mData;
+    anm = mAnm;
+    s32 groundCheckCount = 0;
+    
+    mDoLib_clipper::changeFar(mDoLib_clipper::getFar() * 1.6363636f);
+    
+    for (int i = 0; i < 200; i++, data++) {
+        // Check if active (bit 0x02 set)
+        if (data->field_0x00 & 0x02) {
+            // Decrement timer if non-zero
+            cLib_calcTimer(&data->field_0x03);
+            
+            // Check if needs ground height check (bit 0x10)
+            if ((data->field_0x00 & 0x10) && groundCheckCount < 8) {
+                data->field_0x04.y = checkGroundY(data->field_0x04);
+                data->field_0x00 &= ~0x10;  // Clear ground check flag
+                groundCheckCount++;
+            }
+            
+            // Clip check - position with height offset
+            cXyz pos(data->field_0x04.x, data->field_0x04.y + 260.0f, data->field_0x04.z);
+            if (mDoLib_clipper::clip(j3dSys.getViewMtx(), pos, 260.0f)) {
+                // Outside view - set clip flag (0x04)
+                data->field_0x00 |= 0x04;
+            } else {
+                // Inside view - clear clip flag (0x04)
+                data->field_0x00 &= ~0x04;
+                
+                // Build transformation matrix
+                s8 animIdx = data->field_0x01;
+                if (animIdx >= 0) {
+                    // Use animation matrix
+                    Mtx& animMtx = anm[animIdx].field_0x08;
+                    animMtx[0][3] = data->field_0x04.x;
+                    animMtx[1][3] = data->field_0x04.y;
+                    animMtx[2][3] = data->field_0x04.z;
+                    mDoMtx_concat(j3dSys.getViewMtx(), animMtx, data->field_0x10);
+                } else {
+                    // No animation - build matrix from position with rotation
+                    mDoMtx_trans(data->field_0x10, data->field_0x04.x, data->field_0x04.y, data->field_0x04.z);
+                    mDoMtx_YrotM(data->field_0x10, i * 0xDCF);
+                    mDoMtx_concat(j3dSys.getViewMtx(), data->field_0x10, data->field_0x10);
+                }
+            }
+        }
+    }
+    
+    mDoLib_clipper::resetFar();
+    j3dSys.getDrawBuffer(0)->entryImm(this, 0);
 }
 
 /* 800C0EF4-800C10D4       .text setData__16dFlower_packet_cFP14dFlower_data_ciScR4cXyziSc */
-void dFlower_packet_c::setData(dFlower_data_c*, int, s8, cXyz&, int, s8) {
-    /* Nonmatching */
+void dFlower_packet_c::setData(dFlower_data_c* i_data, int param_2, s8 i_flowerType, cXyz& i_pos, int i_roomNo, s8 i_item) {
+    // Check if during overlap/peek phase
+    if (fopOvlpM_IsPeek()) {
+        // Get actual ground height
+        i_data->field_0x04.y = checkGroundY(i_pos);
+        i_data->field_0x00 = 0x06;
+    } else {
+        // Use provided Y, mark for ground check later
+        i_data->field_0x04.y = i_pos.y;
+        i_data->field_0x00 = 0x16;
+    }
+    
+    // Set flower type flag (alternate model)
+    if (i_flowerType == 2) {
+        i_data->field_0x00 |= 0x20;
+    }
+    
+    // Random animation index
+    i_data->field_0x01 = (u8)(int)cM_rndF(7.0f);
+    i_data->field_0x04.x = i_pos.x;
+    i_data->field_0x04.z = i_pos.z;
+    i_data->field_0x02 = i_item;
+    i_data->field_0x03 = 0;
+    
+    // Setup display list pointers based on room
+    // Room 0x21 uses special flower model
+    if (i_roomNo == 0x21 && strcmp(dComIfGp_getStartStageName(), "Epr") == 0) {
+        field_0x4608 = (f32*)l_pos;  // Position array
+        field_0x460c = (GXColor*)l_color;  // Color array  
+        field_0x4610 = (f32*)l_texCoord;  // Texcoord array
+        field_0x4614 = l_matDL;  // Material DL
+        field_0x4618 = 0xA0;
+        field_0x461c = l_OhanaDL;  // Flower DL
+        field_0x4620 = 0x660;
+        field_0x4624 = l_Ohana_gutDL;  // Cut flower DL
+        field_0x4628 = 0x80;
+    } else {
+        field_0x4608 = (f32*)l_pos;
+        field_0x460c = (GXColor*)l_color;
+        field_0x4610 = (f32*)l_texCoord;
+        field_0x4614 = l_matDL;
+        field_0x4618 = 0xA0;
+        field_0x461c = l_OhanaDL;
+        field_0x4620 = 0x120;
+        field_0x4624 = l_Ohana_gutDL;
+        field_0x4628 = 0x80;
+    }
+    
+    // Mark if using special DL
+    if (field_0x461c == l_OhanaDL) {
+        i_data->field_0x00 |= 0x40;
+    }
+    
+    mRoom[i_roomNo].newData(i_data);
+    field_0x0010 = param_2;
 }
 
 /* 800C10D4-800C121C       .text newData__16dFlower_packet_cFScR4cXyziSc */
-void dFlower_packet_c::newData(s8, cXyz&, int, s8) {
-    /* Nonmatching */
+dFlower_data_c* dFlower_packet_c::newData(s8 i_flowerType, cXyz& i_pos, int i_roomNo, s8 i_item) {
+    JUT_ASSERT(0xB76, i_roomNo >= 0 && i_roomNo < 64);
+    
+    // Search from current index to end
+    s32 startIdx = field_0x0010;
+    for (int i = startIdx; i < 200; i++) {
+        if ((mData[i].field_0x00 & 0x02) == 0) {
+            setData(&mData[i], startIdx, i_flowerType, i_pos, i_roomNo, i_item);
+            return &mData[i];
+        }
+    }
+    
+    // Search from beginning to current index
+    for (int i = 0; i < startIdx; i++) {
+        if ((mData[i].field_0x00 & 0x02) == 0) {
+            setData(&mData[i], startIdx, i_flowerType, i_pos, i_roomNo, i_item);
+            return &mData[i];
+        }
+    }
+    
+    return NULL;
 }
 
 /* 800C121C-800C1264       .text newAnm__16dFlower_packet_cFv */
-void dFlower_packet_c::newAnm() {
-    /* Nonmatching */
+s32 dFlower_packet_c::newAnm() {
+    for (int i = 8; i < 72; i++) {
+        if (mAnm[i].field_0x00 == 0) {
+            mAnm[i].field_0x00 = 1;
+            mAnm[i].field_0x02 = 0;
+            mAnm[i].field_0x04 = 0;
+            return i;
+        }
+    }
+    return -1;
 }
 
 /* 800C1264-800C1288       .text setAnm__16dFlower_packet_cFis */
-void dFlower_packet_c::setAnm(int, s16) {
-    /* Nonmatching */
+void dFlower_packet_c::setAnm(int i_idx, s16 i_angle) {
+    dFlower_anm_c* anm = &mAnm[i_idx];
+    anm->field_0x00 = 1;
+    anm->field_0x02 = i_angle;
+    anm->field_0x04 = 0;
 }

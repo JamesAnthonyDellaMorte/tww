@@ -19,9 +19,13 @@ public:
     void WorkAt(fopAc_ac_c*, u32, int, dCcMassS_HitInf*);
     void hitCheck(fopAc_ac_c*, int);
 
-    /* 0x00 */ u8 field_0x00[0x04 - 0x00];
+    /* 0x00 */ u8 field_0x00;
+    /* 0x01 */ u8 field_0x01;
+    /* 0x02 */ u8 field_0x02;
+    /* 0x03 */ u8 field_0x03;
     /* 0x04 */ cXyz field_0x04;
-    /* 0x10 */ u8 field_0x10[0x44 - 0x10];
+    /* 0x10 */ Mtx field_0x10;
+    /* 0x40 */ dFlower_data_c* field_0x40;
 };
 
 class dFlower_anm_c {
@@ -31,7 +35,7 @@ public:
     /* 0x00 */ u8 field_0x00;
     /* 0x02 */ s16 field_0x02;
     /* 0x04 */ s16 field_0x04;
-    /* 0x06 */ u8 field_0x6[0x38 - 0x6];
+    /* 0x08 */ Mtx field_0x08;
 };
 
 class dFlower_room_c {
@@ -51,8 +55,8 @@ public:
     void calc();
     void update();
     void setData(dFlower_data_c*, int, s8, cXyz&, int, s8);
-    void newData(s8, cXyz&, int, s8);
-    void newAnm();
+    dFlower_data_c* newData(s8, cXyz&, int, s8);
+    s32 newAnm();
     void setAnm(int, s16);
     void deleteRoom(s32 roomNo) { mRoom[roomNo].deleteData(); }
 
@@ -65,7 +69,8 @@ public:
     /* 0x3534 */ dFlower_anm_c mAnm[72];
     /* 0x44F4 */ dFlower_room_c mRoom[64];
     /* 0x45F4 */ u8 field_0x45f4;
-    /* 0x45F5 */ u8 field_0x45F5[0x45F8 - 0x45F5];
+    /* 0x45F5 */ u8 field_0x45f5;
+    /* 0x45F6 */ s16 field_0x45f6;
     /* 0x45F8 */ s16 field_0x45f8;
     /* 0x45FA */ u8 field_0x45FA[0x45FC - 0x45FA];
     /* 0x45FC */ cXyz field_0x45fc;
@@ -73,11 +78,11 @@ public:
     /* 0x460C */ GXColor* field_0x460c;
     /* 0x4610 */ f32* field_0x4610;
     /* 0x4614 */ void* field_0x4614;
-    /* 0x4618 */ void* field_0x4618;
+    /* 0x4618 */ u32 field_0x4618;
     /* 0x461C */ void* field_0x461c;
-    /* 0x4620 */ void* field_0x4620;
+    /* 0x4620 */ u32 field_0x4620;
     /* 0x4624 */ void* field_0x4624;
-    /* 0x4628 */ void* field_0x4628;
+    /* 0x4628 */ u32 field_0x4628;
 };
 
 #endif /* D_FLOWER_H */

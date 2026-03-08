@@ -1822,26 +1822,24 @@ def emit_build_rule(asset):
     steps = config.custom_build_steps.setdefault("pre-compile", [])
     custom_data = asset.get("custom_data") or {}
 
-    match asset.get("custom_type"):
-        case None:
-            return
-
-        case "matDL":
-            steps.append(
-                {
-                    "rule": "convert_matDL",
-                    "inputs": out_dir / "bin" / asset["binary"],
-                    "outputs": out_dir / "include" / asset["header"],
-                    "variables": {
-                        "symbol": asset.get("rename") or asset["symbol"],
-                        "scope": custom_data.get("scope", "local")
-                    },
-                    "implicit": Path("tools/converters/matDL_dis.py"),
-                }
-            )
-
-        case _:
-            print("Unknown asset type: " + asset["custom_type"])
+    custom_type = asset.get("custom_type")
+    if custom_type is None:
+        return
+    elif custom_type == "matDL":
+        steps.append(
+            {
+                "rule": "convert_matDL",
+                "inputs": out_dir / "bin" / asset["binary"],
+                "outputs": out_dir / "include" / asset["header"],
+                "variables": {
+                    "symbol": asset.get("rename") or asset["symbol"],
+                    "scope": custom_data.get("scope", "local")
+                },
+                "implicit": Path("tools/converters/matDL_dis.py"),
+            }
+        )
+    else:
+        print("Unknown asset type: " + asset["custom_type"])
 
 
 # Parse the config and create the build rules for all our assets

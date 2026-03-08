@@ -556,7 +556,7 @@ config.libs = [
             Object(Matching,    "d/d_cam_type2.cpp"),
             Object(NonMatching, "d/d_ev_camera.cpp"),
             Object(MatchingFor("GZLJ01", "GZLE01", "GZLP01"),    "d/d_wood.cpp"),
-            Object(NonMatching, "d/d_flower.cpp"),
+            Object(Equivalent, "d/d_flower.cpp"),  # weak func order
             Object(Matching,    "d/d_item_data.cpp"),
             Object(MatchingFor("GZLJ01", "GZLE01", "GZLP01"),    "d/d_seafightgame.cpp"),
             Object(Matching,    "d/d_spline_path.cpp"),
